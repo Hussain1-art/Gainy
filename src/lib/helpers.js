@@ -68,6 +68,44 @@ export function autoCat(cats) {
   return (cats.find(c => c.id === want) || cats[0]).id;
 }
 
+// ─── PROGRESS ENGINE ──────────────────────────────────────────────────────
+// Weight log is an ascending array of { d: 'YYYY-MM-DD', kg: Number }.
+export function upsertWeight(weightLog, d, kg) {
+  const arr = Array.isArray(weightLog) ? weightLog.slice() : [];
+  const i = arr.findIndex(e => e.d === d);
+  if (i >= 0) arr[i] = { d, kg }; else arr.push({ d, kg });
+  arr.sort((a, b) => (a.d < b.d ? -1 : 1));
+  return arr;
+}
+
+// Δ since start, Δ since previous entry, and remaining to target.
+export function weightChanges(user) {
+  const log = Array.isArray(user.weightLog) ? user.weightLog : [];
+  const current = log.length ? log[log.length - 1].kg : user.weight;
+  const start = user.startWeight ?? current;
+  const prev = log.length > 1 ? log[log.length - 2].kg : start;
+  return {
+    current,
+    start,
+    target: user.tWeight,
+    sinceStart: Math.round((current - start) * 10) / 10,
+    sinceLast: Math.round((current - prev) * 10) / 10,
+    toTarget: Math.round((current - user.tWeight) * 10) / 10,
+    entries: log.length,
+  };
+}
+
+// 7-day averages over days that actually have a log (zeros excluded so a
+// single logged day doesn't read as a 7th of itself).
+export function weeklyAverages(cache) {
+  let cal = 0, pro = 0, n = 0;
+  for (let o = -6; o <= 0; o++) {
+    const s = cache[dKey(o)];
+    if (s && s.cal > 0) { cal += s.cal; pro += s.pro; n++; }
+  }
+  return { avgCal: n ? Math.round(cal / n) : 0, avgPro: n ? Math.round(pro / n) : 0, days: n };
+}
+
 // ─── HTML ESCAPING (XSS protection) ───────────────────────────────────────
 // Every dynamic string that originates from a user or an external API is run
 // through esc() before being interpolated into an innerHTML template, so a

@@ -1,15 +1,30 @@
-// ─── DESIGN TOKENS ────────────────────────────────────────────────────────
+// ─── DESIGN TOKENS · Gainy UI V2 ──────────────────────────────────────────
+// Warm, premium-wellness palette. Green = commit/confirm action,
+// orange = brand / energy / add, gold + amber = reward moments.
 export const C = {
-  blue: '#2F5AC4',
-  blueDark: '#1E3F8F',
-  blueSoft: '#EAF0FF',
-  ice: '#D6E4FF',
-  sky: '#7FB1FF',
-  bg: '#F5F7FC',
-  card: '#FFFFFF',
-  ink: '#1A2B4A',
-  sub: '#8C97B5',
-  border: '#E8EDF8',
+  bg: '#F7F8F7',         // app canvas
+  card: '#EDEAE8',       // warm greige surface
+  cardSoft: '#F2EFEC',   // lighter inset
+  white: '#FFFFFF',      // elevated hero surfaces
+  brand: '#EF7305',      // primary brand / add / energy
+  brandDark: '#D8650A',  // brand pressed
+  brandSoft: '#FCEBDA',  // soft orange wash
+  gold: '#EFCC15',       // accent / streak fills
+  warm: '#FFDD9B',       // warm highlight wash / ring track
+  ink: '#232323',        // primary text
+  sub: '#8A857F',        // muted text
+  border: '#E3DED9',     // hairline
+  action: '#6B8B5E',     // confirm CTA / selected / on-track (sage)
+  actionDark: '#3A4A2A', // emphasis CTA (deep olive)
+  sage: '#E9EFE1',       // sage tint card
+  scan: '#1A1A1A',       // scanner immersive stage
+
+  // Legacy aliases — keep any untouched reference on-palette.
+  blue: '#EF7305',
+  blueDark: '#3A4A2A',
+  blueSoft: '#FCEBDA',
+  ice: '#FFDD9B',
+  sky: '#EFCC15',
 };
 
 // ─── FOOD DATABASE ────────────────────────────────────────────────────────

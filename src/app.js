@@ -3,8 +3,9 @@ import { ic, SVG } from './lib/icons.js';
 import { S } from './lib/storage.js';
 import {
   dKey, calcTargets, emptyLog, fixLog, sumLog, autoCat, lookupBarcode,
-  searchFoods, hashPassword,
+  searchFoods, hashPassword, upsertWeight,
 } from './lib/helpers.js';
+import { renderSuccess } from './screens/success.js';
 import { DEF_CATS, DEF_ROUTINE, FOODS, ACTS } from './lib/constants.js';
 import { renderSplash, renderAuth, renderOnboard } from './screens/auth.js';
 import { renderHome } from './screens/home.js';
@@ -31,6 +32,8 @@ export const state = {
   onboard: { step: 0, goal: 'lose', sex: 'm', age: 28, height: 175, weight: 75, tWeight: 70, actLvl: 'mod' },
   scanner: { status: 'idle', found: null, manual: '', err: '' },
   search: { q: '', results: [], status: 'idle', error: '' },
+  streak: 0,
+  success: null, // { name, mealId, mealLabel } — drives the celebration takeover
   _scanReader: null,
 };
 
@@ -91,11 +94,13 @@ function _render() {
 ${t.svg}<span>${t.label}</span></button>`).join('');
 
     const sheetHTML = state.sheet ? renderSheet(state) : '';
+    const successHTML = state.success ? `<div class="takeover">${renderSuccess(state)}</div>` : '';
 
     root.innerHTML = `<div class="shell">
 <div class="screen">${screenHTML}</div>
 <nav class="nav">${nav}</nav>
 ${sheetHTML}
+${successHTML}
 </div>`;
 
     // Attach video stream + wire the decode loop exactly once per scan session.
@@ -221,6 +226,7 @@ export const app = {
         name: state.user.name, email: state.user.email, pw: state.user.pw,
         goal: o.goal, sex: o.sex, age: o.age, height: o.height,
         weight: o.weight, tWeight: o.tWeight, startWeight: o.weight, actLvl: o.actLvl,
+        weightLog: [{ d: dKey(0), kg: o.weight }],
         targets, reminders: { breakfast: true, lunch: true, dinner: true, water: false },
       };
       state.user = u; app._persistUser();
@@ -239,11 +245,27 @@ export const app = {
     state.log = saved ? fixLog(saved, cats) : emptyLog(cats);
     state.selCat = autoCat(cats);
     app._loadHistory();
+    app._computeStreak();
   },
   _saveToday() {
     S.set('log:' + dKey(0), state.log);
     const s = sumLog(state.log);
     state.cache[dKey(0)] = s; S.set('sum:' + dKey(0), s);
+    app._computeStreak();
+  },
+  // Current logging streak: consecutive days (back from today) with any food
+  // logged. An empty in-progress "today" doesn't break the streak — we start
+  // counting at yesterday in that case.
+  _computeStreak() {
+    const today = sumLog(state.log);
+    let streak = 0;
+    let off = today.cal > 0 ? 0 : -1;
+    for (; off > -180; off--) {
+      const k = dKey(off);
+      const s = off === 0 ? today : (state.cache[k] || S.get('sum:' + k));
+      if (s && s.cal > 0) streak++; else break;
+    }
+    state.streak = streak;
   },
   _loadHistory() {
     for (let o = -6; o <= 0; o++) {
@@ -336,13 +358,16 @@ export const app = {
       cal: Math.round(f.cal * srv), pro: Math.round(f.pro * srv * 10) / 10,
       carb: Math.round(f.carb * srv * 10) / 10, fat: Math.round(f.fat * srv * 10) / 10,
     };
+    const isEdit = !!sd.existing;
     if (sd.existing) {
       const om = sd.existing.meal;
       state.log.meals[om] = state.log.meals[om].filter(i => i.id !== sd.existing.id);
     }
     if (!state.log.meals[meal]) state.log.meals[meal] = [];
     state.log.meals[meal].push(entry);
-    app._saveToday(); state.sheet = null; state.tab = 'progress'; state.selCat = meal; render();
+    app._saveToday(); state.sheet = null; state.sheetData = {}; state.selCat = meal;
+    if (isEdit) { state.tab = 'progress'; render(); }
+    else app._celebrate(entry.name, meal); // new addition → celebration moment
   },
   removeFood() {
     const sd = state.sheetData; if (!sd.existing) return;
@@ -427,7 +452,10 @@ export const app = {
   },
   saveWeight() {
     const w = state.sheetData.newW !== undefined ? state.sheetData.newW : state.user.weight;
-    state.user.weight = w; app._persistUser(); state.sheet = null; render();
+    state.user.weight = w;
+    state.user.weightLog = upsertWeight(state.user.weightLog, dKey(0), w);
+    if (state.user.startWeight === undefined) state.user.startWeight = w;
+    app._persistUser(); state.sheet = null; render();
   },
   epAdj(key, delta) {
     const cur = state.sheetData[key] !== undefined ? state.sheetData[key] : state.user[key === 'ew' ? 'weight' : 'tWeight'];
@@ -499,6 +527,14 @@ export const app = {
       }
     }
   },
+  async toggleTorch() {
+    try {
+      const track = state._pendingStream?.getVideoTracks?.()[0];
+      if (!track) return;
+      state._torch = !state._torch;
+      await track.applyConstraints({ advanced: [{ torch: state._torch }] });
+    } catch (e) { /* torch not supported on this device — ignore */ }
+  },
   stopScanner() {
     if (state._scanReader) { try { state._scanReader.reset(); } catch (e) {} }
     if (state._scanPoll) { clearInterval(state._scanPoll); state._scanPoll = null; }
@@ -556,8 +592,18 @@ export const app = {
     const entry = { id: Date.now() + '-sc', name: f.name, brand: f.brand || '', serving: '1 serving', servings: 1, baseFood: f, cal: f.cal, pro: f.pro, carb: f.carb, fat: f.fat };
     if (!state.log.meals[meal]) state.log.meals[meal] = [];
     state.log.meals[meal].push(entry);
-    app._saveToday(); state.sheet = null; state.tab = 'progress'; state.selCat = meal; render();
+    app._saveToday(); state.sheet = null; state.selCat = meal;
+    app._celebrate(entry.name, meal);
   },
+
+  // ── Celebration / success takeover ──
+  _celebrate(name, mealId) {
+    const cat = state.cats.find(c => c.id === mealId);
+    state.success = { name, mealId, mealLabel: cat ? cat.label : 'your log' };
+    render();
+  },
+  closeSuccess() { state.success = null; state.tab = 'progress'; render(); },
+  successAddAnother() { state.success = null; state.tab = 'search'; render(); },
 };
 
 // expose for inline onclick handlers in the generated HTML strings
