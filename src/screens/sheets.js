@@ -1,6 +1,7 @@
 import { C } from '../lib/constants.js';
 import { ic } from '../lib/icons.js';
 import { stepper, sheetHd } from '../lib/ui.js';
+import { esc } from '../lib/helpers.js';
 import { ACT_LEVELS, GOALS, CAT_ICONS, ROUTINE_ICONS, ACTS } from '../lib/constants.js';
 
 export function renderSheet(state) {
@@ -9,6 +10,7 @@ export function renderSheet(state) {
   if (s === 'quickadd') content = renderQA(state);
   else if (s === 'scanner') content = renderScanner(state);
   else if (s === 'addfood') content = renderAddFood(state);
+  else if (s === 'manualfood') content = renderManualFood(state);
   else if (s === 'addcat') content = renderAddCat(state);
   else if (s === 'editcat') content = renderEditCat(state);
   else if (s === 'addroutine') content = renderAddRoutine(state);
@@ -100,8 +102,8 @@ ${ic('cam', '#fff', 16)} Take photo of barcode
     const f = sc.found;
     return `<div>
 ${sheetHd('Product found!')}
-<div style="font-size:16px;font-weight:700;color:${C.ink};margin-bottom:4px">${f.name}</div>
-<div style="font-size:12px;color:${C.sub};margin-bottom:12px">${f.brand ? f.brand + ' · ' : ''}${f.serving}</div>
+<div style="font-size:16px;font-weight:700;color:${C.ink};margin-bottom:4px">${esc(f.name)}</div>
+<div style="font-size:12px;color:${C.sub};margin-bottom:12px">${f.brand ? esc(f.brand) + ' · ' : ''}${esc(f.serving)}</div>
 <div style="display:flex;gap:16px;font-size:13px;padding:12px 16px;border-radius:12px;background:${C.bg};margin-bottom:20px">
 <span><b style="color:${C.ink}">${f.cal}</b> kcal</span>
 <span><b style="color:${C.blue}">${f.pro}g</b> P</span>
@@ -110,7 +112,7 @@ ${sheetHd('Product found!')}
 </div>
 <div class="lbl">Add to meal</div>
 <div class="scrollrow" style="margin-bottom:20px">
-${state.cats.map(c => `<button onclick="state.scanner.targetMeal='${c.id}'" style="padding:8px 16px;border-radius:20px;font-size:12px;font-weight:700;flex-shrink:0;background:${(state.scanner.targetMeal || state.selCat) === c.id ? C.blue : C.blueSoft};color:${(state.scanner.targetMeal || state.selCat) === c.id ? '#fff' : C.blue}">${c.icon} ${c.label}</button>`).join('')}
+${state.cats.map(c => `<button onclick="state.scanner.targetMeal='${c.id}';render()" style="padding:8px 16px;border-radius:20px;font-size:12px;font-weight:700;flex-shrink:0;background:${(state.scanner.targetMeal || state.selCat) === c.id ? C.blue : C.blueSoft};color:${(state.scanner.targetMeal || state.selCat) === c.id ? '#fff' : C.blue}">${c.icon} ${esc(c.label)}</button>`).join('')}
 </div>
 <button onclick="app.addScannedFood()" class="btn" style="background:${C.blue};color:#fff">Add to log</button>
 </div>`;
@@ -120,7 +122,7 @@ ${state.cats.map(c => `<button onclick="state.scanner.targetMeal='${c.id}'" styl
 <div style="font-size:32px;margin-bottom:12px">🔍</div>
 <div style="font-size:16px;font-weight:700;margin-bottom:8px">Product not found</div>
 <div style="font-size:13px;color:rgba(255,255,255,.6);margin-bottom:20px">${sc.err || "We couldn't find that product in Open Food Facts. Try a clearer photo or enter the barcode manually."}</div>
-<input id="retry-bc" value="${sc.manual || ''}" placeholder="Barcode number" inputmode="numeric" style="width:100%;padding:12px;border-radius:12px;font-size:14px;background:rgba(255,255,255,.1);color:#fff;border:none;outline:none;margin-bottom:10px" oninput="state.scanner.manual=this.value"/>
+<input id="retry-bc" value="${esc(sc.manual || '')}" placeholder="Barcode number" inputmode="numeric" style="width:100%;padding:12px;border-radius:12px;font-size:14px;background:rgba(255,255,255,.1);color:#fff;border:none;outline:none;margin-bottom:10px" oninput="state.scanner.manual=this.value"/>
 <button onclick="app.manualLookup()" style="width:100%;padding:12px;border-radius:12px;font-size:14px;font-weight:700;background:${C.sky};color:${BG};margin-bottom:10px">Try again</button>
 <label style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:12px;background:rgba(255,255,255,.1);cursor:pointer;font-size:14px;font-weight:700;color:#fff">
 ${ic('cam', '#fff', 16)} Take another photo
@@ -139,15 +141,15 @@ function renderAddFood(state) {
   const carb = Math.round(f.carb * srv * 10) / 10; const fat = Math.round(f.fat * srv * 10) / 10;
   const meal = sd.meal || state.selCat;
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px">
-<div><div style="font-size:18px;font-weight:700;color:${C.ink}">${f.name}</div>
-<div style="font-size:12px;color:${C.sub};margin-top:2px">${f.brand ? f.brand + ' · ' : ''}${f.serving}</div></div>
+<div><div style="font-size:18px;font-weight:700;color:${C.ink}">${esc(f.name)}</div>
+<div style="font-size:12px;color:${C.sub};margin-top:2px">${f.brand ? esc(f.brand) + ' · ' : ''}${esc(f.serving)}</div></div>
 <button onclick="app.closeSheet()" style="width:32px;height:32px;border-radius:50%;background:${C.blueSoft};display:flex;align-items:center;justify-content:center">${ic('x', C.blue, 16)}</button>
 </div>
 <div class="lbl">Servings</div>
 ${stepper('af-srv', srv, 'app.afSrv(-.5)', 'app.afSrv(.5)')}
 <div class="lbl" style="margin-top:14px">${sd.existing ? 'Meal' : 'Add to'}</div>
 <div class="scrollrow" style="margin-bottom:16px">
-${state.cats.map(c => `<button onclick="state.sheetData.meal='${c.id}';render()" style="padding:8px 16px;border-radius:20px;font-size:12px;font-weight:700;flex-shrink:0;background:${meal === c.id ? C.blue : C.blueSoft};color:${meal === c.id ? '#fff' : C.blue}">${c.icon} ${c.label}</button>`).join('')}
+${state.cats.map(c => `<button onclick="state.sheetData.meal='${c.id}';render()" style="padding:8px 16px;border-radius:20px;font-size:12px;font-weight:700;flex-shrink:0;background:${meal === c.id ? C.blue : C.blueSoft};color:${meal === c.id ? '#fff' : C.blue}">${c.icon} ${esc(c.label)}</button>`).join('')}
 </div>
 <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-radius:12px;margin-bottom:16px;background:${C.bg}">
 <div style="font-size:14px;font-weight:700;color:${C.ink}">${cal} kcal</div>
@@ -156,8 +158,26 @@ ${state.cats.map(c => `<button onclick="state.sheetData.meal='${c.id}';render()"
 <span><b style="color:${C.sky}">${carb}g</b> C</span>
 <span><b style="color:${C.blueDark}">${fat}g</b> F</span>
 </div></div>
-<button onclick="app.saveFood()" class="btn" style="background:${C.blue};color:#fff">${sd.existing ? 'Save changes' : 'Add to ' + (state.cats.find(c => c.id === meal)?.label || '')}</button>
+<button onclick="app.saveFood()" class="btn" style="background:${C.blue};color:#fff">${sd.existing ? 'Save changes' : 'Add to ' + esc(state.cats.find(c => c.id === meal)?.label || '')}</button>
 ${sd.existing ? `<button onclick="app.removeFood()" class="btn" style="background:${C.ice};color:${C.blueDark};margin-top:10px">${ic('trash', C.blueDark, 15)} Remove from log</button>` : ''}`;
+}
+
+// ─── MANUAL FOOD ENTRY ────────────────────────────────────────────────────
+function renderManualFood(state) {
+  const sd = state.sheetData;
+  const v = (k) => esc(sd[k] !== undefined ? sd[k] : '');
+  const field = (label, key, ph, mode) => `<div class="lbl">${label}</div>
+<input class="inp" style="margin-bottom:14px" placeholder="${ph}" value="${v(key)}" ${mode ? `inputmode="${mode}"` : ''} oninput="state.sheetData.${key}=this.value"/>`;
+  return sheetHd('Add food manually') + `<div style="font-size:12px;color:${C.sub};margin-bottom:16px">Enter what you know — you'll pick the meal and servings next.</div>
+${field('Name', 'mfName', 'e.g. Homemade smoothie', '')}
+<div class="grid2">
+<div>${field('Calories (kcal)', 'mfCal', '0', 'numeric')}</div>
+<div>${field('Protein (g)', 'mfPro', '0', 'decimal')}</div>
+<div>${field('Carbs (g)', 'mfCarb', '0', 'decimal')}</div>
+<div>${field('Fat (g)', 'mfFat', '0', 'decimal')}</div>
+</div>
+${sd.mfErr ? `<div style="font-size:12px;padding:8px 12px;border-radius:10px;background:${C.ice};color:${C.blueDark};margin:4px 0 12px">${esc(sd.mfErr)}</div>` : ''}
+<button onclick="app.saveManualFood()" class="btn" style="background:${C.blue};color:#fff;margin-top:6px">Continue</button>`;
 }
 
 // ─── CATEGORY MANAGEMENT ──────────────────────────────────────────────────
@@ -177,7 +197,7 @@ function renderEditCat(state) {
   const lbl = sd.editLabel !== undefined ? sd.editLabel : cat.label;
   const ico = sd.editIcon !== undefined ? sd.editIcon : cat.icon;
   return sheetHd('Edit meal') + `<div class="lbl">Name</div>
-<input class="inp" value="${lbl}" style="margin-bottom:16px" oninput="state.sheetData.editLabel=this.value"/>
+<input class="inp" value="${esc(lbl)}" style="margin-bottom:16px" oninput="state.sheetData.editLabel=this.value"/>
 <div class="lbl">Icon</div>
 <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px">
 ${CAT_ICONS.map(e => `<button onclick="state.sheetData.editIcon='${e}';render()" style="width:40px;height:40px;border-radius:12px;font-size:20px;background:${ico === e ? C.blue : C.blueSoft}">${e}</button>`).join('')}

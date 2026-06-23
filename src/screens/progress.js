@@ -1,7 +1,7 @@
 import { C } from '../lib/constants.js';
 import { ic } from '../lib/icons.js';
 import { donutRing, weekCalendarHTML, barChart } from '../lib/ui.js';
-import { sumLog, dKey } from '../lib/helpers.js';
+import { sumLog, dKey, esc } from '../lib/helpers.js';
 
 // Progress is a single scrollable page:
 //   1. Date selector  2. Macros  3. Meal sections (today's log)
@@ -28,7 +28,7 @@ function renderLogSection(state) {
     const kcal = isToday ? (state.log.meals[c.id] || []).reduce((s, i) => s + i.cal, 0) : 0;
     const active = c.id === state.selCat;
     return `<button onclick="app.selCat('${c.id}')" style="flex-shrink:0;border-radius:16px;padding:10px 16px;text-align:left;background:${active ? C.blue : C.card};border:1px solid ${active ? C.blue : C.border};cursor:pointer">
-<div style="font-size:12px;font-weight:700;color:${active ? '#fff' : C.ink}">${c.icon} ${c.label}</div>
+<div style="font-size:12px;font-weight:700;color:${active ? '#fff' : C.ink}">${c.icon} ${esc(c.label)}</div>
 <div style="font-size:11px;margin-top:2px;color:${active ? 'rgba(255,255,255,.75)' : C.sub}">${kcal} kcal</div>
 </button>`;
   }).join('');
@@ -36,11 +36,11 @@ function renderLogSection(state) {
   const activeCat = state.cats.find(c => c.id === state.selCat) || state.cats[0];
   const activeItems = isToday ? (state.log.meals[state.selCat] || []) : [];
   const itemRows = activeItems.map(it => `<button onclick="app.editFood('${state.selCat}','${it.id}')" style="width:100%;display:flex;justify-content:space-between;font-size:12px;padding:8px 0;border-top:1px solid ${C.border};color:${C.sub};text-align:left;cursor:pointer">
-<span>${it.name} <span style="color:#C8D2EC">· ${it.serving}</span></span>
+<span>${esc(it.name)} <span style="color:#C8D2EC">· ${esc(it.serving)}</span></span>
 <span style="font-weight:600;color:${C.ink}">${it.cal} kcal</span>
 </button>`).join('');
 
-  const chartData = state.cats.map(c => ({ label: c.label, v: isToday ? (state.log.meals[c.id] || []).reduce((s, i) => s + i.cal, 0) : 0, color: c.id === state.selCat ? C.blue : C.ice }));
+  const chartData = state.cats.map(c => ({ label: esc(c.label), v: isToday ? (state.log.meals[c.id] || []).reduce((s, i) => s + i.cal, 0) : 0, color: c.id === state.selCat ? C.blue : C.ice }));
 
   return `
 ${weekCalendarHTML({ wOff: state.wOff, selDate: state.selDate, cache: state.cache, targets: t })}
@@ -65,13 +65,13 @@ ${isToday ? `<button onclick="app.sheet('addcat')" style="width:28px;height:28px
 <div class="scrollrow" style="margin-bottom:16px">${catTabs}</div>
 ${isToday ? `<div class="card" style="margin-bottom:20px">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-<div><div style="font-size:14px;font-weight:700;color:${C.ink}">${activeCat.label}</div>
+<div><div style="font-size:14px;font-weight:700;color:${C.ink}">${esc(activeCat.label)}</div>
 <div style="font-size:12px;color:${C.sub}">${activeItems.reduce((s, i) => s + i.cal, 0)} kcal · ${activeItems.length} items</div></div>
 <button onclick="app.sheet('editcat','${activeCat.id}')" style="width:32px;height:32px;border-radius:50%;background:${C.blueSoft};display:flex;align-items:center;justify-content:center">${ic('edit', C.blue, 14)}</button>
 </div>
 ${itemRows}
 <button onclick="app.goAddFood('${activeCat.id}')" style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-top:8px;color:${C.blue};cursor:pointer">
-${ic('plus', C.blue, 13)} Add food to ${activeCat.label}</button>
+${ic('plus', C.blue, 13)} Add food to ${esc(activeCat.label)}</button>
 </div>` : `<div class="card" style="text-align:center;margin-bottom:20px;background:${C.blueSoft}">
 <div style="font-size:14px;font-weight:600;color:${C.ink};margin-bottom:4px">Viewing a past day</div>
 <div style="font-size:12px;color:${C.sub};margin-bottom:12px">Item detail is only available for today.</div>

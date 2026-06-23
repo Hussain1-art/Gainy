@@ -1,5 +1,6 @@
 import { C } from '../lib/constants.js';
 import { ic } from '../lib/icons.js';
+import { esc } from '../lib/helpers.js';
 import { ACT_LEVELS, GOALS } from '../lib/constants.js';
 
 export function renderProfile(state) {
@@ -15,9 +16,9 @@ export function renderProfile(state) {
 
   return `<div style="font-size:24px;font-weight:800;color:${C.ink};margin-bottom:20px">Profile</div>
 <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
-<div style="width:64px;height:64px;border-radius:50%;background:${C.blueSoft};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:${C.blue}">${u.name.charAt(0).toUpperCase()}</div>
-<div><div style="font-size:18px;font-weight:700;color:${C.ink}">${u.name}</div>
-<div style="font-size:12px;color:${C.sub}">${u.email || ''}</div></div>
+<div style="width:64px;height:64px;border-radius:50%;background:${C.blueSoft};display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:${C.blue}">${esc(u.name.charAt(0).toUpperCase())}</div>
+<div><div style="font-size:18px;font-weight:700;color:${C.ink}">${esc(u.name)}</div>
+<div style="font-size:12px;color:${C.sub}">${esc(u.email || '')}</div></div>
 </div>
 <div style="border-radius:16px;padding:16px;margin-bottom:20px;background:${C.blue}">
 <div style="font-size:11px;font-weight:600;color:rgba(255,255,255,.7);margin-bottom:8px">YOUR GOAL</div>
@@ -35,5 +36,5 @@ ${rows.map(([k, v], i) => `<div style="display:flex;align-items:center;justify-c
 </div>
 <button onclick="app.sheet('editprofile')" class="btn" style="background:${C.blueSoft};color:${C.blue};margin-bottom:10px">${ic('edit', C.blue, 15)} Edit goals &amp; stats</button>
 <button onclick="app.logout()" class="btn" style="background:${C.card};border:1px solid ${C.border};color:${C.ink};margin-bottom:10px">${ic('logout', C.ink, 15)} Log out</button>
-<button onclick="app.reset()" class="btn" style="background:${C.ice};color:${C.blueDark}">${ic('reset', C.blueDark, 15)} Reset demo data</button>`;
+<button onclick="app.reset()" class="btn" style="background:${C.ice};color:${C.blueDark}">${ic('reset', C.blueDark, 15)} Delete account &amp; data</button>`;
 }

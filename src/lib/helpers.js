@@ -68,20 +68,31 @@ export function autoCat(cats) {
   return (cats.find(c => c.id === want) || cats[0]).id;
 }
 
-// ─── BARCODE LOOKUP ───────────────────────────────────────────────────────
-// Open Food Facts only — no API key required. Covers most packaged
-// products including Woolworths, Coles, Aldi house brands and major
-// international brands, since OFF is a community database keyed by
-// the same GTIN/EAN barcodes used on physical packaging.
-export async function lookupBarcode(code) {
-  const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`);
-  if (!res.ok) throw new Error('network');
-  const data = await res.json();
-  if (data.status !== 1 || !data.product) return null;
-  const p = data.product;
+// ─── HTML ESCAPING (XSS protection) ───────────────────────────────────────
+// Every dynamic string that originates from a user or an external API is run
+// through esc() before being interpolated into an innerHTML template, so a
+// product name like `<img onerror=...>` can never execute or break layout.
+const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+export function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ESC_MAP[c]);
+}
+
+// ─── PASSWORD HASHING ─────────────────────────────────────────────────────
+// SHA-256 via Web Crypto (available on https + localhost). We never store the
+// raw password — only this hex digest — and compare digests on login.
+export async function hashPassword(pw) {
+  const data = new TextEncoder().encode('gainy:' + pw);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ─── OPEN FOOD FACTS ──────────────────────────────────────────────────────
+// Shared normaliser: turns an OFF product record into Gainy's food shape.
+// Prefers per-serving values, falls back to per-100g.
+function normalizeProduct(p, code) {
   const n = p.nutriments || {};
   return {
-    id: 'off-' + code,
+    id: 'off-' + (code || p.code || p._id || (p.product_name || 'x')),
     name: p.product_name || 'Unknown product',
     brand: p.brands || '',
     serving: p.serving_size || 'per 100g',
@@ -90,4 +101,32 @@ export async function lookupBarcode(code) {
     carb: Math.round((n['carbohydrates_serving'] ?? n['carbohydrates_100g'] ?? 0) * 10) / 10,
     fat: Math.round((n['fat_serving'] ?? n['fat_100g'] ?? 0) * 10) / 10,
   };
+}
+
+// Barcode lookup — no API key required. Covers most packaged products
+// (Woolworths, Coles, Aldi house brands, major international brands) since
+// OFF is keyed by the same GTIN/EAN barcodes printed on packaging.
+export async function lookupBarcode(code) {
+  const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`);
+  if (!res.ok) throw new Error('network');
+  const data = await res.json();
+  if (data.status !== 1 || !data.product) return null;
+  return normalizeProduct(data.product, code);
+}
+
+// Name search — returns up to 20 normalised foods. Throws on network/HTTP
+// failure so callers can fall back to the local food list.
+export async function searchFoods(query) {
+  const q = (query || '').trim();
+  if (!q) return [];
+  const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}`
+    + '&search_simple=1&action=process&json=1&page_size=20'
+    + '&fields=code,product_name,brands,serving_size,nutriments';
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('network');
+  const data = await res.json();
+  const products = Array.isArray(data.products) ? data.products : [];
+  return products
+    .map((p) => normalizeProduct(p, p.code))
+    .filter((f) => f.name && f.name !== 'Unknown product' && f.cal > 0);
 }

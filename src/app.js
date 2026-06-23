@@ -3,6 +3,7 @@ import { ic, SVG } from './lib/icons.js';
 import { S } from './lib/storage.js';
 import {
   dKey, calcTargets, emptyLog, fixLog, sumLog, autoCat, lookupBarcode,
+  searchFoods, hashPassword,
 } from './lib/helpers.js';
 import { DEF_CATS, DEF_ROUTINE, FOODS, ACTS } from './lib/constants.js';
 import { renderSplash, renderAuth, renderOnboard } from './screens/auth.js';
@@ -29,11 +30,34 @@ export const state = {
   loginErr: '',
   onboard: { step: 0, goal: 'lose', sex: 'm', age: 28, height: 175, weight: 75, tWeight: 70, actLvl: 'mod' },
   scanner: { status: 'idle', found: null, manual: '', err: '' },
+  search: { q: '', results: [], status: 'idle', error: '' },
   _scanReader: null,
 };
 
+// Debounce timer for the food-name search (module-scoped, not part of state).
+let _searchTimer = null;
+
 // ─── RENDER ───────────────────────────────────────────────────────────────
+// Public render() is a safety wrapper: if any screen builder throws, we show
+// a recoverable error card instead of leaving #app blank (white screen).
 export function render() {
+  try {
+    _render();
+  } catch (e) {
+    console.error('Render failed:', e);
+    const root = document.getElementById('app');
+    if (root) {
+      root.innerHTML = `<div class="shell"><div class="screen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px">
+<div style="font-size:40px">⚠️</div>
+<div style="font-size:18px;font-weight:800;color:${C.ink}">Something went wrong</div>
+<div style="font-size:13px;color:${C.sub};max-width:280px">The app hit an unexpected error. Your saved data is safe — reload to continue.</div>
+<button onclick="location.reload()" class="btn" style="background:${C.blue};color:#fff;max-width:200px;margin-top:8px">Reload Gainy</button>
+</div></div>`;
+    }
+  }
+}
+
+function _render() {
   const root = document.getElementById('app');
   if (!root) return;
 
@@ -114,41 +138,74 @@ export const app = {
   inspect(i) { state.sheetData.inspected = i; render(); },
   authMode(m) { state.sheetData.authMode = m; render(); },
 
-  // ── Auth (simple local signup/login — no API key) ──
-  auth() {
+  // ── Auth (local signup/login — multiple accounts, hashed passwords) ──
+  // Accounts live in the `users` map keyed by lowercased email. The active
+  // session is mirrored into `user` for fast boot resume in main.js.
+  async auth() {
     const mode = state.sheetData.authMode || 'signup';
     const name = (document.getElementById('au-name')?.value || '').trim();
     const email = (document.getElementById('au-email')?.value || '').trim();
     const pw = (document.getElementById('au-pw')?.value || '').trim();
+    const key = email.toLowerCase();
+    const users = S.get('users') || {};
 
     if (mode === 'signup') {
       if (!name) { state.loginErr = 'Please enter your name.'; render(); return; }
       if (!email) { state.loginErr = 'Please enter an email.'; render(); return; }
-      state.user = { name, email, _pending: true };
+      if (pw.length < 4) { state.loginErr = 'Password must be at least 4 characters.'; render(); return; }
+      if (users[key]) { state.loginErr = 'An account with that email already exists — log in instead.'; render(); return; }
+      let pwHash;
+      try { pwHash = await hashPassword(pw); }
+      catch (e) { state.loginErr = "Couldn't secure your password on this device. Try again."; render(); return; }
+      // Carry the hash through onboarding; the full account is written once
+      // onboarding completes, so a half-finished signup can't overwrite anything.
+      state.user = { name, email, pw: pwHash, _pending: true };
       state.loginErr = '';
       state.stage = 'onboard';
       render();
-    } else {
-      const u = S.get('user');
-      if (u && (!email || u.email === email)) {
-        state.user = { reminders: {}, ...u };
-        app._loadToday();
-        state.stage = 'app';
-        render();
-      } else {
-        state.loginErr = 'No account found with that email — try Sign up.';
-        render();
-      }
+      return;
+    }
+
+    // login
+    if (!email) { state.loginErr = 'Please enter your email.'; render(); return; }
+    if (!pw) { state.loginErr = 'Please enter your password.'; render(); return; }
+    const acct = users[key];
+    if (!acct) { state.loginErr = 'No account found with that email — try Sign up.'; render(); return; }
+    let pwHash;
+    try { pwHash = await hashPassword(pw); }
+    catch (e) { state.loginErr = "Couldn't verify your password on this device. Try again."; render(); return; }
+    if (acct.pw !== pwHash) { state.loginErr = 'Incorrect password.'; render(); return; }
+    state.user = { reminders: {}, ...acct };
+    state.loginErr = '';
+    app._loadToday();
+    state.stage = 'app';
+    render();
+  },
+  // Persist the active user to both the session slot and the accounts map so
+  // profile/goal/weight edits survive a logout → login round-trip.
+  _persistUser() {
+    if (!state.user) return;
+    S.set('user', state.user);
+    if (state.user.email) {
+      const users = S.get('users') || {};
+      users[state.user.email.toLowerCase()] = state.user;
+      S.set('users', users);
     }
   },
-  logout() { state.stage = 'auth'; state.loginErr = ''; render(); },
+  logout() { state.stage = 'auth'; state.loginErr = ''; state.sheet = null; render(); },
   reset() {
+    const key = state.user?.email?.toLowerCase();
     S.del('user'); S.del('cats'); S.del('routine'); S.del('log:' + dKey(0));
     for (let o = -6; o < 0; o++) S.del('sum:' + dKey(o));
+    if (key) {
+      const users = S.get('users') || {};
+      delete users[key];
+      S.set('users', users);
+    }
     state.user = null; state.log = null; state.cache = {};
     state.cats = DEF_CATS.slice(); state.routine = DEF_ROUTINE.slice();
     state.selDate = dKey(0); state.wOff = 0;
-    state.stage = 'auth'; render();
+    state.stage = 'auth'; state.sheet = null; render();
   },
 
   // ── Onboarding ──
@@ -161,12 +218,12 @@ export const app = {
       const o = state.onboard;
       const targets = calcTargets({ age: o.age, sex: o.sex, height: o.height, weight: o.weight, actLvl: o.actLvl, goal: o.goal });
       const u = {
-        name: state.user.name, email: state.user.email,
+        name: state.user.name, email: state.user.email, pw: state.user.pw,
         goal: o.goal, sex: o.sex, age: o.age, height: o.height,
         weight: o.weight, tWeight: o.tWeight, startWeight: o.weight, actLvl: o.actLvl,
         targets, reminders: { breakfast: true, lunch: true, dinner: true, water: false },
       };
-      state.user = u; S.set('user', u);
+      state.user = u; app._persistUser();
       app._loadToday();
       state.stage = 'app'; render();
       return;
@@ -200,10 +257,67 @@ export const app = {
     }
   },
 
-  // ── Food ──
-  addFoodFromSearch(id) {
-    const f = FOODS.find(x => x.id === id); if (!f) return;
+  // ── Food search (Open Food Facts by name, local foods as fallback) ──
+  _localMatches(q) {
+    const s = q.toLowerCase();
+    return FOODS.filter(f => f.name.toLowerCase().includes(s) || (f.brand || '').toLowerCase().includes(s));
+  },
+  onSearchInput(q) {
+    state.search.q = q;
+    if (_searchTimer) clearTimeout(_searchTimer);
+    // Debounce so we don't fire a network request on every keystroke (and so
+    // the input keeps focus while typing — render only happens after a pause).
+    _searchTimer = setTimeout(() => app.runSearch(q), 350);
+  },
+  async runSearch(q) {
+    if (q !== state.search.q) return; // a newer keystroke superseded this one
+    if (!q.trim()) { state.search = { q: '', results: [], status: 'idle', error: '' }; render(); return; }
+    const local = app._localMatches(q);
+    state.search.status = 'loading';
+    state.search.results = local; // show local hits immediately while the API loads
+    state.search.error = '';
+    render();
+    try {
+      const api = await searchFoods(q);
+      if (q !== state.search.q) return; // stale response, ignore
+      // Local foods first (curated), then API results.
+      state.search.results = [...local, ...api];
+      state.search.status = 'done';
+      state.search.error = '';
+    } catch (e) {
+      if (q !== state.search.q) return;
+      // API unreachable — fall back to local matches only.
+      state.search.results = local;
+      state.search.status = 'error';
+      state.search.error = "Couldn't reach the food database — showing local foods only.";
+    }
+    render();
+  },
+  pickSearchResult(i) {
+    const q = state.search.q.trim();
+    const list = q ? state.search.results : FOODS;
+    const f = list[i]; if (!f) return;
     state.sheet = 'addfood'; state.sheetData = { food: f, servings: 1, meal: autoCat(state.cats) };
+    render();
+  },
+
+  // ── Manual food entry (when nothing is found) ──
+  saveManualFood() {
+    const sd = state.sheetData;
+    const name = (sd.mfName || '').trim();
+    const cal = Number(sd.mfCal);
+    if (!name) { sd.mfErr = 'Please enter a food name.'; render(); return; }
+    if (!Number.isFinite(cal) || cal <= 0) { sd.mfErr = 'Please enter calories (a number above 0).'; render(); return; }
+    const num = (v) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.round(n * 10) / 10 : 0; };
+    const food = {
+      id: 'man-' + Date.now(),
+      name, brand: '', serving: '1 serving',
+      cal: Math.round(cal), pro: num(sd.mfPro), carb: num(sd.mfCarb), fat: num(sd.mfFat),
+    };
+    // Route through the normal add-food sheet so servings/meal selection and
+    // logging work exactly like a search or barcode result.
+    state.sheet = 'addfood';
+    state.sheetData = { food, servings: 1, meal: autoCat(state.cats) };
     render();
   },
   goAddFood(catId) { state.sheet = null; state.sheetData = {}; state.selCat = catId; state.tab = 'search'; render(); },
@@ -251,7 +365,7 @@ export const app = {
   toggleReminder(id) {
     if (!state.user.reminders) state.user.reminders = {};
     state.user.reminders[id] = !state.user.reminders[id];
-    S.set('user', state.user); render();
+    app._persistUser(); render();
   },
   saveActivity() {
     const sd = state.sheetData; const act = ACTS.find(a => a.id === sd.actPicked); if (!act) return;
@@ -305,7 +419,7 @@ export const app = {
       fat: sd.gfat !== undefined ? sd.gfat : t.fat,
       water: t.water,
     };
-    S.set('user', state.user); state.sheet = null; render();
+    app._persistUser(); state.sheet = null; render();
   },
   wAdj(d) {
     const cur = state.sheetData.newW !== undefined ? state.sheetData.newW : state.user.weight;
@@ -313,7 +427,7 @@ export const app = {
   },
   saveWeight() {
     const w = state.sheetData.newW !== undefined ? state.sheetData.newW : state.user.weight;
-    state.user.weight = w; S.set('user', state.user); state.sheet = null; render();
+    state.user.weight = w; app._persistUser(); state.sheet = null; render();
   },
   epAdj(key, delta) {
     const cur = state.sheetData[key] !== undefined ? state.sheetData[key] : state.user[key === 'ew' ? 'weight' : 'tWeight'];
@@ -329,7 +443,7 @@ export const app = {
       age: state.user.age, sex: state.user.sex, height: state.user.height,
       weight: state.user.weight, actLvl: state.user.actLvl, goal: state.user.goal,
     });
-    S.set('user', state.user); state.sheet = null; render();
+    app._persistUser(); state.sheet = null; render();
   },
 
   // ── Barcode scanner ──

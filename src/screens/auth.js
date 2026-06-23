@@ -30,7 +30,7 @@ ${mode === 'signup' ? `<div class="lbl">Name</div><input class="inp" style="marg
 <div class="lbl">Password</div><input class="inp" type="password" style="margin-bottom:12px" placeholder="••••••••" id="au-pw"/>
 ${state.loginErr ? `<div style="font-size:12px;padding:8px 12px;border-radius:10px;background:${C.ice};color:${C.blueDark};margin-bottom:12px">${state.loginErr}</div>` : ''}
 <button class="btn" style="background:${C.blue};color:#fff" onclick="app.auth()">${mode === 'signup' ? 'Continue' : 'Log in'}</button>
-<div style="text-align:center;font-size:11px;margin-top:12px;color:${C.sub}">Your data is stored securely and stays yours.</div></div>`;
+<div style="text-align:center;font-size:11px;margin-top:12px;color:${C.sub}">Your account is stored on this device.</div></div>`;
 }
 
 // ─── ONBOARDING ───────────────────────────────────────────────────────────
