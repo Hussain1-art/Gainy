@@ -16,7 +16,6 @@ import { renderSheet } from './screens/sheets.js';
 export const state = {
   stage: 'loading', // loading | auth | onboard | app
   tab: 'home', // home | progress | search | profile  (search reached via quick-add, not a bottom tab)
-  progressSubTab: 'log',
   user: null,
   cats: DEF_CATS.slice(),
   routine: DEF_ROUTINE.slice(),
@@ -32,11 +31,6 @@ export const state = {
   scanner: { status: 'idle', found: null, manual: '', err: '' },
   _scanReader: null,
 };
-// keep a `progressSub` alias name used inside progress.js
-Object.defineProperty(state, 'progressSub', {
-  get() { return state.progressSubTab; },
-  set(v) { state.progressSubTab = v; },
-});
 
 // ─── RENDER ───────────────────────────────────────────────────────────────
 export function render() {
@@ -96,7 +90,6 @@ ${sheetHTML}
 // ─── APP CONTROLLER (exposed globally for inline onclick handlers) ───────
 export const app = {
   tab(t) { state.tab = t; state.sheet = null; render(); },
-  progressSub(s) { state.progressSubTab = s; render(); },
   sheet(name, catId) {
     if (state.sheet === 'scanner') app.stopScanner();
     state.sheet = name; state.sheetData = {};
@@ -235,7 +228,7 @@ export const app = {
     }
     if (!state.log.meals[meal]) state.log.meals[meal] = [];
     state.log.meals[meal].push(entry);
-    app._saveToday(); state.sheet = null; state.tab = 'progress'; state.progressSubTab = 'log'; state.selCat = meal; render();
+    app._saveToday(); state.sheet = null; state.tab = 'progress'; state.selCat = meal; render();
   },
   removeFood() {
     const sd = state.sheetData; if (!sd.existing) return;
@@ -250,7 +243,7 @@ export const app = {
     if (r.type === 'water') { app.logWater(); return; }
     if (r.type === 'meal') {
       const cat = state.cats.find(c => c.id === r.mid);
-      if (cat) { state.selCat = cat.id; state.tab = 'progress'; state.progressSubTab = 'log'; state.sheet = null; render(); }
+      if (cat) { state.selCat = cat.id; state.tab = 'progress'; state.sheet = null; render(); }
       return;
     }
     state.log.done[rid] = !state.log.done[rid]; app._saveToday(); render();
@@ -449,7 +442,7 @@ export const app = {
     const entry = { id: Date.now() + '-sc', name: f.name, brand: f.brand || '', serving: '1 serving', servings: 1, baseFood: f, cal: f.cal, pro: f.pro, carb: f.carb, fat: f.fat };
     if (!state.log.meals[meal]) state.log.meals[meal] = [];
     state.log.meals[meal].push(entry);
-    app._saveToday(); state.sheet = null; state.tab = 'progress'; state.progressSubTab = 'log'; state.selCat = meal; render();
+    app._saveToday(); state.sheet = null; state.tab = 'progress'; state.selCat = meal; render();
   },
 };
 
