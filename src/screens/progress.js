@@ -1,135 +1,224 @@
 import { C } from '../lib/constants.js';
 import { ic } from '../lib/icons.js';
-import { donutRing, weekCalendarHTML, barChart, lineChart } from '../lib/ui.js';
+import { lineChart } from '../lib/ui.js';
 import { sumLog, dKey, esc, weightChanges, weeklyAverages } from '../lib/helpers.js';
 
-// Single scrollable page:
-//   Today's log (date selector · macros · meal sections)
-//   + Progress Engine (streak · weight trend · weight changes · averages).
-
-export function renderProgress(state) {
-  return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
-<div><div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:${C.brand}">GAINY</div><div style="font-size:26px;font-weight:800;color:${C.ink}">Progress</div></div>
-<button onclick="app.sheet('scanner')" style="width:46px;height:46px;border-radius:50%;background:${C.brand};display:flex;align-items:center;justify-content:center" class="soft">${ic('cam', '#fff')}</button>
-</div>
-${renderLogSection(state)}
-${renderEngine(state)}`;
+// ─── HORIZONTAL BAR ───────────────────────────────────────────────────────
+function hBar(pct, fg = C.brand, bg = C.card, h = 8) {
+  const w = Math.min(100, Math.max(0, pct));
+  return `<div style="width:100%;height:${h}px;border-radius:${h}px;background:${bg};overflow:hidden;margin:6px 0">
+<div style="height:100%;width:${w}%;background:${fg};border-radius:${h}px;transition:width .4s ease"></div>
+</div>`;
 }
 
-// ─── LOG SECTION (date selector + macros + meal sections) ─────────────────
-function renderLogSection(state) {
-  const isToday = state.selDate === dKey(0);
-  const sum = isToday ? sumLog(state.log) : (state.cache[state.selDate] || { cal: 0, pro: 0, carb: 0, fat: 0 });
+// ─── DAILY CALORIES CHART (7 bars) ───────────────────────────────────────
+function dailyCalChart(state, days) {
   const t = state.user.targets;
-  const rem = t.cal - sum.cal;
+  const today = dKey(0);
+  const data = days.map(off => {
+    const key = dKey(off);
+    const isT = key === today;
+    const sum = isT ? sumLog(state.log) : (state.cache[key] || null);
+    const cal = sum ? sum.cal : null;
+    const dayStr = ['Su','Mo','Tu','We','Th','Fr','Sa'][new Date(key + 'T12:00:00').getDay()];
+    const hit = cal != null && cal >= t.cal * 0.9 && cal <= t.cal * 1.1;
+    return { cal, dayStr, hit, isT };
+  });
 
-  const catTabs = state.cats.map(c => {
-    const kcal = isToday ? (state.log.meals[c.id] || []).reduce((s, i) => s + i.cal, 0) : 0;
-    const active = c.id === state.selCat;
-    return `<button onclick="app.selCat('${c.id}')" style="flex-shrink:0;border-radius:18px;padding:11px 16px;text-align:left;background:${active ? C.brand : C.card};cursor:pointer">
-<div style="font-size:12px;font-weight:700;color:${active ? '#fff' : C.ink}">${c.icon} ${esc(c.label)}</div>
-<div style="font-size:11px;margin-top:2px;color:${active ? 'rgba(255,255,255,.8)' : C.sub}">${kcal} kcal</div>
-</button>`;
+  const mx = Math.max(t.cal * 1.2, ...data.map(d => d.cal || 0), 500);
+  const W = 320, H = 120, padL = 8, padB = 22, padT = 12, padR = 8;
+  const iW = W - padL - padR, iH = H - padB - padT;
+  const bW = Math.floor(iW / data.length) - 8;
+  const goalY = padT + iH - Math.round((t.cal / mx) * iH);
+
+  const bars = data.map((d, i) => {
+    if (d.cal === null) {
+      const x = padL + i * (iW / data.length) + (iW / data.length - bW) / 2;
+      return `<rect x="${x}" y="${padT + iH - 4}" width="${bW}" height="4" rx="3" fill="${C.border}"/>
+<text x="${x + bW/2}" y="${H - 5}" text-anchor="middle" font-size="9" fill="${C.sub}">${d.dayStr}</text>`;
+    }
+    const bH = Math.max(4, Math.round((d.cal / mx) * iH));
+    const x = padL + i * (iW / data.length) + (iW / data.length - bW) / 2;
+    const y = padT + iH - bH;
+    const color = d.isT ? C.brand : d.hit ? C.action : C.warm;
+    return `<rect x="${x}" y="${y}" width="${bW}" height="${bH}" rx="5" fill="${color}" ${d.isT ? `opacity="1"` : 'opacity=".85"'}/>
+<text x="${x + bW/2}" y="${H - 5}" text-anchor="middle" font-size="9" fill="${d.isT ? C.ink : C.sub}">${d.dayStr}</text>`;
   }).join('');
 
-  const activeCat = state.cats.find(c => c.id === state.selCat) || state.cats[0];
-  const activeItems = isToday ? (state.log.meals[state.selCat] || []) : [];
-  const itemRows = activeItems.map(it => `<button onclick="app.editFood('${state.selCat}','${it.id}')" style="width:100%;display:flex;justify-content:space-between;font-size:13px;padding:10px 0;border-top:1px solid ${C.border};color:${C.sub};text-align:left;cursor:pointer">
-<span>${esc(it.name)} <span style="color:#BDB6AE">· ${esc(it.serving)}</span></span>
-<span style="font-weight:700;color:${C.ink}">${it.cal} kcal</span>
-</button>`).join('');
+  const goalLine = `<line x1="${padL}" y1="${goalY}" x2="${W - padR}" y2="${goalY}" stroke="${C.action}" stroke-width="1.5" stroke-dasharray="5 3"/>
+<text x="${W - padR}" y="${goalY - 4}" text-anchor="end" font-size="9" fill="${C.action}">Goal ${t.cal}</text>`;
 
-  const chartData = state.cats.map(c => ({ label: esc(c.label), v: isToday ? (state.log.meals[c.id] || []).reduce((s, i) => s + i.cal, 0) : 0, color: c.id === state.selCat ? C.brand : C.warm }));
-
-  return `
-${weekCalendarHTML({ wOff: state.wOff, selDate: state.selDate, cache: state.cache, targets: t })}
-<div class="card-white" style="display:flex;flex-direction:column;align-items:center;margin-bottom:16px;padding:22px">
-${donutRing([
-    { v: sum.cal, max: t.cal, color: C.brand, bg: C.warm },
-    { v: sum.pro, max: t.pro, color: C.action, bg: C.sage },
-    { v: sum.carb, max: t.carb, color: C.gold, bg: C.warm },
-    { v: sum.fat, max: t.fat, color: C.actionDark, bg: C.sage },
-  ], 158, sum.cal, 'kcal logged')}
-<div style="font-size:13px;font-weight:700;margin-top:10px;color:${rem >= 0 ? C.action : C.brand}">${rem >= 0 ? rem + ' kcal left today' : Math.abs(rem) + ' kcal over goal'}</div>
-</div>
-<div class="grid3" style="margin-bottom:22px">
-<div class="card" style="text-align:center"><div style="font-size:15px;font-weight:800;color:${C.action}">${Math.round(sum.pro)}g</div><div style="font-size:10px;color:${C.sub};margin-top:2px">Protein /${t.pro}g</div></div>
-<div class="card" style="text-align:center"><div style="font-size:15px;font-weight:800;color:${C.gold}">${Math.round(sum.carb)}g</div><div style="font-size:10px;color:${C.sub};margin-top:2px">Carbs /${t.carb}g</div></div>
-<div class="card" style="text-align:center"><div style="font-size:15px;font-weight:800;color:${C.actionDark}">${Math.round(sum.fat)}g</div><div style="font-size:10px;color:${C.sub};margin-top:2px">Fat /${t.fat}g</div></div>
-</div>
-<div class="section-hd">
-<div class="lbl" style="margin:0">Meals</div>
-${isToday ? `<button onclick="app.sheet('addcat')" style="width:30px;height:30px;border-radius:50%;background:${C.brand};display:flex;align-items:center;justify-content:center">${ic('plus', '#fff', 15)}</button>` : ''}
-</div>
-<div class="scrollrow" style="margin-bottom:16px">${catTabs}</div>
-${isToday ? `<div class="card" style="margin-bottom:22px">
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-<div><div style="font-size:15px;font-weight:800;color:${C.ink}">${esc(activeCat.label)}</div>
-<div style="font-size:12px;color:${C.sub}">${activeItems.reduce((s, i) => s + i.cal, 0)} kcal · ${activeItems.length} items</div></div>
-<button onclick="app.sheet('editcat','${activeCat.id}')" style="width:34px;height:34px;border-radius:50%;background:${C.brandSoft};display:flex;align-items:center;justify-content:center">${ic('edit', C.brand, 14)}</button>
-</div>
-${itemRows}
-<button onclick="app.goAddFood('${activeCat.id}')" style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:800;margin-top:10px;color:${C.brand};cursor:pointer">
-${ic('plus', C.brand, 14)} Add food to ${esc(activeCat.label)}</button>
-</div>` : `<div class="card" style="text-align:center;margin-bottom:22px;background:${C.sage}">
-<div style="font-size:14px;font-weight:700;color:${C.ink};margin-bottom:4px">Viewing a past day</div>
-<div style="font-size:12px;color:${C.sub};margin-bottom:14px">Item detail is only available for today.</div>
-<button onclick="app.goToday()" style="padding:10px 22px;border-radius:22px;font-size:12px;font-weight:700;background:${C.action};color:#fff">Back to today</button>
-</div>`}
-<div class="lbl">Meal kcal</div>
-<div class="card" style="margin-bottom:26px">${barChart(chartData, 'app.selCatIdx')}</div>`;
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="overflow:visible">${goalLine}${bars}</svg>`;
 }
 
-// ─── PROGRESS ENGINE ──────────────────────────────────────────────────────
-function renderEngine(state) {
+// ─── CONSISTENCY METRIC ROW ───────────────────────────────────────────────
+function metricRow(label, val, sub, color = C.ink) {
+  return `<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid ${C.border}">
+<div style="font-size:14px;color:${C.sub}">${label}</div>
+<div style="text-align:right">
+  <div style="font-size:16px;font-weight:800;color:${color}">${val}</div>
+  ${sub ? `<div style="font-size:11px;color:${C.sub};margin-top:1px">${sub}</div>` : ''}
+</div>
+</div>`;
+}
+
+// ─── TIMEFRAME PILLS ─────────────────────────────────────────────────────
+function tfPills(active, options, onClickFn) {
+  return `<div style="display:flex;gap:6px">
+${options.map(o => `<button onclick="${onClickFn}('${o}')" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;background:${active===o ? C.brand : C.card};color:${active===o ? '#fff' : C.sub}">${o}</button>`).join('')}
+</div>`;
+}
+
+// ─── MAIN RENDER ─────────────────────────────────────────────────────────
+export function renderProgress(state) {
   const u = state.user;
+  const t = u.targets;
   const wc = weightChanges(u);
   const avg = weeklyAverages(state.cache);
-  const t = u.targets;
-  const points = (Array.isArray(u.weightLog) && u.weightLog.length ? u.weightLog : [{ d: dKey(0), kg: u.weight }]).slice(-12);
   const streak = state.streak || 0;
+  const today = dKey(0);
+  const isToday = state.selDate === today;
+  const sum = isToday ? sumLog(state.log) : (state.cache[state.selDate] || { cal: 0, pro: 0, carb: 0, fat: 0 });
 
-  const deltaStr = (v, unit = 'kg') => (v > 0 ? `+${v}` : `${v}`) + unit;
-  const lostWeight = wc.sinceStart < 0;
+  // Build last 7 days offsets
+  const last7 = [-6,-5,-4,-3,-2,-1,0];
+
+  // Nutrition consistency — count days this week hitting targets
+  const calHitDays = last7.filter(off => {
+    const key = dKey(off);
+    if (key === today) { const s = sumLog(state.log); return s.cal >= t.cal * 0.9; }
+    const s = state.cache[key];
+    return s && s.cal >= t.cal * 0.9;
+  }).length;
+
+  const proHitDays = last7.filter(off => {
+    const key = dKey(off);
+    if (key === today) { const s = sumLog(state.log); return s.pro >= t.pro * 0.9; }
+    const s = state.cache[key];
+    return s && s.pro >= t.pro * 0.9;
+  }).length;
+
+  const loggedDays = last7.filter(off => {
+    const key = dKey(off);
+    if (key === today) return sumLog(state.log).cal > 0;
+    const s = state.cache[key];
+    return s && s.cal > 0;
+  }).length;
+
+  // Weight progress
+  const weightStart = Array.isArray(u.weightLog) && u.weightLog.length > 0
+    ? u.weightLog[0].kg
+    : u.weight;
+  const weightCurrent = wc.current;
+  const weightGoal = wc.target;
+  const isGain = u.goal === 'gain';
+  const totalRange = Math.abs(weightGoal - weightStart);
+  const progress = totalRange > 0
+    ? Math.min(100, Math.round((Math.abs(weightCurrent - weightStart) / totalRange) * 100))
+    : 100;
+  const toGoal = Math.round(Math.abs(weightGoal - weightCurrent) * 10) / 10;
+
+  // Weight log for trend
+  const wPoints = (Array.isArray(u.weightLog) && u.weightLog.length
+    ? u.weightLog
+    : [{ d: today, kg: u.weight }]).slice(-20);
+
+  const tfMap = { '30D': -30, '90D': -90, '6M': -180, '1Y': -365 };
+  const activeTf = state.progressTf || '90D';
 
   return `
-<div style="height:1px;background:${C.border};margin:4px 0 22px"></div>
-<div style="font-size:20px;font-weight:800;color:${C.ink};margin-bottom:4px">Your progress</div>
-<div style="font-size:13px;color:${C.sub};margin-bottom:18px">Trends across your wellness journey</div>
-
-<div class="card-white" style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
-<div style="width:62px;height:62px;border-radius:20px;background:${C.brandSoft};display:flex;align-items:center;justify-content:center">${ic('flame', C.brand, 30)}</div>
-<div style="flex:1">
-<div style="display:flex;align-items:baseline;gap:6px"><div style="font-size:30px;font-weight:800;color:${C.ink}">${streak}</div><div style="font-size:14px;font-weight:700;color:${C.sub}">day${streak === 1 ? '' : 's'}</div></div>
-<div style="font-size:13px;color:${C.sub};margin-top:2px">${streak > 0 ? 'Logging streak — keep the flame alive!' : 'Log a food today to start your streak.'}</div>
+<!-- HEADER -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:22px">
+<div>
+  <div style="font-size:11px;font-weight:800;letter-spacing:.08em;color:${C.brand};margin-bottom:2px">GAINY</div>
+  <div style="font-size:28px;font-weight:800;color:${C.ink}">Progress</div>
 </div>
+<button onclick="app.sheet('scanner')" style="width:46px;height:46px;border-radius:50%;background:${C.brand};display:flex;align-items:center;justify-content:center" class="soft">${ic('cam','#fff')}</button>
 </div>
 
-<div class="lbl">Weight progress</div>
-<div class="card-white" style="margin-bottom:16px">
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-<div><div style="font-size:24px;font-weight:800;color:${C.ink}">${wc.current}<span style="font-size:14px;font-weight:600;color:${C.sub}"> kg</span></div>
-<div style="font-size:12px;color:${C.sub}">Target ${wc.target} kg</div></div>
-<button onclick="app.sheet('updateweight')" style="display:flex;align-items:center;gap:6px;padding:10px 16px;border-radius:22px;background:${C.action};color:#fff;font-size:12px;font-weight:700">${ic('scale', '#fff', 15)} Log weight</button>
+<!-- DAILY CALORIES CARD -->
+<div style="background:${C.white};border-radius:22px;padding:18px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,.05)">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+  <div style="font-size:16px;font-weight:800;color:${C.ink}">Daily Calories</div>
+  <div style="display:flex;gap:6px">
+    ${['7D','30D'].map(o => `<button onclick="app.progressTf && app.progressTf('${o}')" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:700;background:${activeTf===o||(!state.progressTf&&o==='7D') ? C.brand : C.card};color:${activeTf===o||(!state.progressTf&&o==='7D') ? '#fff' : C.sub}">${o}</button>`).join('')}
+  </div>
 </div>
-${points.length > 1 ? lineChart(points, { target: wc.target }) : `<div style="padding:24px 12px;text-align:center;font-size:12px;color:${C.sub};background:${C.cardSoft};border-radius:16px">Log your weight a few times to see your trend line.</div>`}
+${dailyCalChart(state, last7)}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid ${C.border}">
+  <div style="font-size:13px;color:${C.sub}">
+    <span style="font-weight:700;color:${C.ink}">${calHitDays} of 7 days</span> hit your calorie target
+  </div>
+  <div style="font-size:13px;font-weight:800;color:${C.brand}">${avg.avgCal || '—'} avg</div>
+</div>
 </div>
 
-<div class="lbl">Weight changes</div>
-<div class="grid3" style="margin-bottom:16px">
-<div class="card" style="text-align:center"><div style="font-size:16px;font-weight:800;color:${lostWeight ? C.action : C.ink}">${deltaStr(wc.sinceStart)}</div><div style="font-size:10px;color:${C.sub};margin-top:2px">Since start</div></div>
-<div class="card" style="text-align:center"><div style="font-size:16px;font-weight:800;color:${C.ink}">${deltaStr(wc.sinceLast)}</div><div style="font-size:10px;color:${C.sub};margin-top:2px">Last change</div></div>
-<div class="card" style="text-align:center"><div style="font-size:16px;font-weight:800;color:${C.brand}">${deltaStr(wc.toTarget)}</div><div style="font-size:10px;color:${C.sub};margin-top:2px">To target</div></div>
+<!-- NUTRITION CONSISTENCY CARD -->
+<div style="background:${C.white};border-radius:22px;padding:18px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,.05)">
+<div style="font-size:16px;font-weight:800;color:${C.ink};margin-bottom:4px">Nutrition Consistency</div>
+<div style="font-size:12px;color:${C.sub};margin-bottom:10px">Last 7 days</div>
+${metricRow('Days calorie target hit', `${calHitDays}/7`, calHitDays >= 5 ? 'Great consistency!' : 'Keep going', calHitDays >= 5 ? C.action : C.brand)}
+${metricRow('Days protein target hit', `${proHitDays}/7`, proHitDays >= 5 ? 'Great protein consistency!' : `${avg.avgPro || '—'}g avg`, proHitDays >= 5 ? C.action : C.ink)}
+${metricRow('Meals logged this week', `${loggedDays} days`, 'out of 7', C.ink)}
+<div style="display:flex;align-items:center;justify-content:space-between;padding-top:12px">
+  <div style="font-size:14px;color:${C.sub}">Current logging streak</div>
+  <div style="display:flex;align-items:center;gap:6px">
+    ${ic('flame', streak > 0 ? C.brand : C.sub, 16)}
+    <span style="font-size:16px;font-weight:800;color:${streak > 0 ? C.brand : C.sub}">${streak} day${streak !== 1 ? 's' : ''}</span>
+  </div>
+</div>
 </div>
 
-<div class="lbl">7-day averages</div>
-<div class="grid2" style="margin-bottom:16px">
-<div class="card-white"><div style="font-size:22px;font-weight:800;color:${C.brand}">${avg.avgCal}</div><div style="font-size:11px;color:${C.sub};margin-top:2px">Avg calories</div>
-<div style="font-size:11px;color:${avg.avgCal && avg.avgCal <= t.cal ? C.action : C.sub};margin-top:6px">${avg.days ? `vs ${t.cal} goal` : 'No data yet'}</div></div>
-<div class="card-white"><div style="font-size:22px;font-weight:800;color:${C.action}">${avg.avgPro}g</div><div style="font-size:11px;color:${C.sub};margin-top:2px">Avg protein</div>
-<div style="font-size:11px;color:${avg.avgPro >= t.pro ? C.action : C.sub};margin-top:6px">${avg.days ? `vs ${t.pro}g goal` : 'No data yet'}</div></div>
+<!-- WEIGHT PROGRESS CARD -->
+<div style="background:${C.white};border-radius:22px;padding:18px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,.05)">
+<div style="font-size:16px;font-weight:800;color:${C.ink};margin-bottom:14px">Weight Progress</div>
+<div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:4px">
+  <div>
+    <div style="font-size:36px;font-weight:900;color:${C.ink};line-height:1">${weightCurrent}<span style="font-size:16px;font-weight:600;color:${C.sub}"> kg</span></div>
+    <div style="font-size:12px;color:${C.sub};margin-top:2px">Current weight</div>
+  </div>
+  <button onclick="app.sheet('updateweight')" style="display:flex;align-items:center;gap:6px;padding:10px 16px;border-radius:22px;background:${C.action};color:#fff;font-size:12px;font-weight:700">${ic('scale','#fff',14)} Log weight</button>
 </div>
-<div style="font-size:11px;color:${C.sub};text-align:center;margin-bottom:8px">${avg.days ? `Averaged over ${avg.days} logged day${avg.days === 1 ? '' : 's'} this week.` : 'Averages appear once you log a few days.'}</div>
+<div style="display:flex;justify-content:space-between;font-size:12px;color:${C.sub};margin:12px 0 4px">
+  <span>Start: <strong style="color:${C.ink}">${weightStart} kg</strong></span>
+  <span>Goal: <strong style="color:${C.ink}">${weightGoal} kg</strong></span>
+</div>
+${hBar(progress, C.brand, C.card, 10)}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+  <div style="font-size:13px;color:${C.sub}">${toGoal > 0 ? `${toGoal} kg to goal` : 'Goal reached! 🎉'}</div>
+  <div style="font-size:12px;font-weight:700;color:${C.action}">${progress}% there</div>
+</div>
+${toGoal > 0 ? `<div style="margin-top:10px;padding:10px 14px;border-radius:14px;background:${C.brandSoft};font-size:12px;color:${C.sub}"><span style="font-weight:700;color:${C.brand}">On track</span> based on your recent trend</div>` : ''}
+</div>
 
-<button onclick="app.sheet('adjustgoal')" class="btn" style="background:${C.card};color:${C.ink}">Adjust daily goals</button>`;
+<!-- WEIGHT TREND CARD -->
+<div style="background:${C.white};border-radius:22px;padding:18px;margin-bottom:14px;box-shadow:0 2px 12px rgba(0,0,0,.05)">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+  <div style="font-size:16px;font-weight:800;color:${C.ink}">Weight Trend</div>
+  <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end">
+    ${['30D','90D','6M','1Y','ALL'].map(o => `<button style="padding:4px 10px;border-radius:18px;font-size:10px;font-weight:700;background:${activeTf===o ? C.brand : C.card};color:${activeTf===o ? '#fff' : C.sub}">${o}</button>`).join('')}
+  </div>
+</div>
+${wPoints.length > 1
+  ? lineChart(wPoints, { target: weightGoal })
+  : `<div style="padding:28px 12px;text-align:center;font-size:12px;color:${C.sub};background:${C.card};border-radius:16px">Log your weight a few times to see your trend.</div>`}
+<div style="display:flex;gap:16px;margin-top:14px;padding-top:12px;border-top:1px solid ${C.border}">
+  <div style="flex:1;text-align:center">
+    <div style="font-size:11px;color:${C.sub}">Since start</div>
+    <div style="font-size:15px;font-weight:800;color:${wc.sinceStart < 0 ? C.action : C.ink};margin-top:3px">${wc.sinceStart > 0 ? '+' : ''}${wc.sinceStart} kg</div>
+  </div>
+  <div style="width:1px;background:${C.border}"></div>
+  <div style="flex:1;text-align:center">
+    <div style="font-size:11px;color:${C.sub}">Last change</div>
+    <div style="font-size:15px;font-weight:800;color:${C.ink};margin-top:3px">${wc.sinceLast > 0 ? '+' : ''}${wc.sinceLast} kg</div>
+  </div>
+  <div style="width:1px;background:${C.border}"></div>
+  <div style="flex:1;text-align:center">
+    <div style="font-size:11px;color:${C.sub}">To target</div>
+    <div style="font-size:15px;font-weight:800;color:${C.brand};margin-top:3px">${wc.toTarget > 0 ? '+' : ''}${wc.toTarget} kg</div>
+  </div>
+</div>
+</div>
+
+<button onclick="app.sheet('adjustgoal')" style="width:100%;padding:15px;border-radius:18px;font-size:14px;font-weight:700;background:${C.card};color:${C.ink};margin-bottom:8px">Adjust daily goals</button>`;
 }
