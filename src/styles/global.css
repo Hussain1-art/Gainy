@@ -8,7 +8,9 @@ html, body {
   overflow: hidden;
 }
 
-button { background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; color: inherit; }
+button { background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; color: inherit; outline: none; }
+button:focus { outline: none; }
+button:focus-visible { outline: 2px solid #EF7305; outline-offset: 2px; border-radius: 6px; }
 input { font-family: inherit; border: none; outline: none; }
 
 #app {
