@@ -90,7 +90,7 @@ function _render() {
       { id: 'profile', svg: SVG.user, label: 'Profile' },
     ];
     const navTab = state.tab === 'search' ? 'progress' : state.tab; // search has no own nav dot
-    const nav = tabs.map(t => `<button class="nav-btn ${navTab === t.id ? 'active' : ''}" onclick="app.tab('${t.id}')" style="color:${navTab === t.id ? C.blue : C.sub}">
+    const nav = tabs.map(t => `<button class="nav-btn ${navTab === t.id ? 'active' : ''}" onclick="app.tab('${t.id}')" style="color:${navTab === t.id ? C.brand : C.sub}">
 ${t.svg}<span>${t.label}</span></button>`).join('');
 
     const sheetHTML = state.sheet ? renderSheet(state) : '';
