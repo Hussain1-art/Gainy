@@ -14,14 +14,14 @@ export const C = {
   ink: '#232323',        // primary text
   sub: '#8A857F',        // muted text
   border: '#E3DED9',     // hairline
-  action: '#6B8B5E',     // confirm CTA / selected / on-track (sage)
-  actionDark: '#3A4A2A', // emphasis CTA (deep olive)
-  sage: '#E9EFE1',       // sage tint card
+  action: '#D4680A',     // confirm CTA / selected / on-track (deep orange)
+  actionDark: '#A04D04', // emphasis CTA (burnt orange)
+  sage: '#FCEBDA',       // soft orange wash (replaces sage tint)
   scan: '#1A1A1A',       // scanner immersive stage
 
   // Legacy aliases — keep any untouched reference on-palette.
   blue: '#EF7305',
-  blueDark: '#3A4A2A',
+  blueDark: '#A04D04',
   blueSoft: '#FCEBDA',
   ice: '#FFDD9B',
   sky: '#EFCC15',
