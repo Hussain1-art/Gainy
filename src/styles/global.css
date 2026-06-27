@@ -73,7 +73,7 @@ input { font-family: inherit; border: none; outline: none; }
   animation: fadein 0.25s ease;
 }
 
-/* ─── Floating navigation ───────────────────────────────────────────── */
+/* ─── Floating navigation — glassmorphism ───────────────────────────── */
 .nav {
   position: absolute;
   left: 18px; right: 18px; bottom: 18px;
@@ -81,9 +81,12 @@ input { font-family: inherit; border: none; outline: none; }
   justify-content: space-around;
   align-items: center;
   padding: 10px 10px;
-  background: #FFFFFF;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
   border-radius: 30px;
-  box-shadow: 0 12px 34px rgba(35, 35, 35, 0.16);
+  border: 1px solid rgba(255,255,255,0.55);
+  box-shadow: 0 8px 32px rgba(35, 35, 35, 0.12), 0 1px 0 rgba(255,255,255,0.8) inset;
   z-index: 20;
 }
 
@@ -194,3 +197,26 @@ input { font-family: inherit; border: none; outline: none; }
 .rise-1 { animation-delay: 0.08s; }
 .rise-2 { animation-delay: 0.16s; }
 .rise-3 { animation-delay: 0.24s; }
+
+/* ─── V2 Home / Progress upgrades ─────────────────────────────────────── */
+.hero-card {
+  background: #EF7305;
+  border-radius: 26px;
+  padding: 22px;
+  box-shadow: 0 8px 28px rgba(239,115,5,.25);
+}
+
+.meal-row-card {
+  background: #FFFFFF;
+  border-radius: 20px;
+  padding: 0 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.05);
+}
+
+.progress-card {
+  background: #FFFFFF;
+  border-radius: 22px;
+  padding: 18px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.05);
+  margin-bottom: 14px;
+}
